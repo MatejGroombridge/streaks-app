@@ -17,7 +17,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -50,14 +49,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CalendarViewWeek
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.LockOpen
@@ -77,7 +75,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -108,7 +105,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -195,7 +191,7 @@ private fun PastWeekScreen(
     contentPadding: PaddingValues,
 ) {
     val today = LocalDate.now().toEpochDay()
-    val days = remember(today, weekStart) { currentWeek(LocalDate.ofEpochDay(today), weekStart).map { it.toEpochDay() } }
+    val days = remember(today) { previousSevenDays(today) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -236,54 +232,19 @@ private fun PastWeekRow(
     today: Long,
     onSetFailed: (Long, Boolean) -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(StreakOrangeDeep),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = Color.Black.copy(alpha = 0.85f),
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = "Porn-free",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                days.forEach { epochDay ->
-                    val failed = epochDay in failedDays
-                    PastWeekDayChip(
-                        date = LocalDate.ofEpochDay(epochDay),
-                        failed = failed,
-                        isToday = epochDay == today,
-                        onClick = { onSetFailed(epochDay, !failed) },
-                        onPick = { markFailed -> onSetFailed(epochDay, markFailed) },
-                    )
-                }
-            }
+        days.forEach { epochDay ->
+            val failed = epochDay in failedDays
+            PastWeekDayChip(
+                date = LocalDate.ofEpochDay(epochDay),
+                failed = failed,
+                isToday = epochDay == today,
+                onClick = { onSetFailed(epochDay, !failed) },
+                onPick = { markFailed -> onSetFailed(epochDay, markFailed) },
+            )
         }
     }
 }
@@ -305,7 +266,7 @@ private fun PastWeekDayChip(
         Text(
             text = date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = if (isToday) 1f else 0.65f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
         )
         Box {
@@ -365,7 +326,7 @@ private fun DayCellShape(
             Text(
                 text = dayOfMonth.toString(),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -379,24 +340,17 @@ private fun PastWeekDialog(
     onDismiss: () -> Unit,
 ) {
     val today = LocalDate.now().toEpochDay()
-    val days = remember(today, weekStart) { currentWeek(LocalDate.ofEpochDay(today), weekStart).map { it.toEpochDay() } }
+    val days = remember(today) { previousSevenDays(today) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Past Week") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Update previous days if you forgot to reset at the time.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                PastWeekRow(
-                    failedDays = state.failureEpochDays,
-                    days = days,
-                    today = today,
-                    onSetFailed = onSetFailed,
-                )
-            }
+            PastWeekRow(
+                failedDays = state.failureEpochDays,
+                days = days,
+                today = today,
+                onSetFailed = onSetFailed,
+            )
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
@@ -431,26 +385,27 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item {
-            StreaksHeader(
+            HomeHeader(
                 onOpenBlocker = onBlockerClick,
                 onOpenSettings = onSettingsClick,
             )
         }
         item {
-            StreakResetTile(
+            CurrentStreakCard(
                 days = streakDays,
-                onClick = { showResetConfirm = true },
+                onResetClick = { showResetConfirm = true },
             )
         }
         item {
-            FilledTonalButton(onClick = { showPastWeek = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Outlined.CalendarViewWeek, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Update past week")
-            }
+            PastWeekCard(
+                failedDays = state.failureEpochDays,
+                days = previousSevenDays(today),
+                today = today,
+                onEditClick = { showPastWeek = true },
+            )
         }
         item {
-            AllTimeRow(
+            AllTimeCard(
                 state = state,
                 today = today,
                 endOfCurrentWeek = endOfCurrentWeek,
@@ -479,7 +434,10 @@ private fun HomeScreen(
                         viewModel.recordFailureToday()
                         showResetConfirm = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = StreakOrangeDeep),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = StreakOrangeDeep,
+                        contentColor = Color.White,
+                    ),
                 ) { Text("I slipped today") }
             },
             dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") } },
@@ -488,7 +446,7 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun StreaksHeader(
+private fun HomeHeader(
     onOpenBlocker: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -498,9 +456,7 @@ private fun StreaksHeader(
             .height(96.dp),
     ) {
         Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 0.dp, top = 0.dp),
+            modifier = Modifier.align(Alignment.TopEnd),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onOpenBlocker) {
@@ -521,41 +477,137 @@ private fun StreaksHeader(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StreakResetTile(days: Long, onClick: () -> Unit) {
+private fun HomeCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(260.dp)
-            .combinedClickable(onClick = onClick),
-        shape = RoundedCornerShape(36.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
+        Column(modifier = Modifier.padding(20.dp), content = content)
+    }
+}
+
+@Composable
+private fun CurrentStreakCard(days: Long, onResetClick: () -> Unit) {
+    HomeCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Outlined.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Current streak", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = days.toString(),
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = if (days == 1L) "day" else "days",
+                modifier = Modifier.padding(bottom = 9.dp),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Button(
+            onClick = onResetClick,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = StreakOrangeDeep,
+                contentColor = Color.White,
+            ),
+        ) {
+            Icon(Icons.Outlined.WarningAmber, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Reset streak")
+        }
+    }
+}
+
+@Composable
+private fun PastWeekCard(
+    failedDays: Set<Long>,
+    days: List<Long>,
+    today: Long,
+    onEditClick: () -> Unit,
+) {
+    HomeCard {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Past week", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = onEditClick) {
+                Icon(Icons.Outlined.Edit, contentDescription = "Edit past week")
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            days.forEach { epochDay ->
+                val date = LocalDate.ofEpochDay(epochDay)
+                WeekPreviewDay(
+                    date = date,
+                    failed = epochDay in failedDays,
+                    isToday = epochDay == today,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekPreviewDay(
+    date: LocalDate,
+    failed: Boolean,
+    isToday: Boolean,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+        )
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (failed) StreakOrangeDeep else MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.Center,
-            ) {
+            if (failed) {
+                Icon(Icons.Outlined.Close, contentDescription = "Reset day", tint = Color.White, modifier = Modifier.size(17.dp))
+            } else {
                 Text(
-                    text = days.toString(),
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = if (days == 1L) "day free" else "days free",
-                    modifier = Modifier.padding(bottom = 10.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    text = date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -590,13 +642,15 @@ private fun AllTimeScreen(
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
                 top = 8.dp,
                 bottom = contentPadding.calculateBottomPadding() + 24.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
-                AllTimeRow(
+                AllTimeCard(
                     state = state,
                     today = today,
                     endOfCurrentWeek = endOfCurrentWeek,
@@ -607,7 +661,7 @@ private fun AllTimeScreen(
 }
 
 @Composable
-private fun AllTimeRow(
+private fun AllTimeCard(
     state: StreakState,
     today: Long,
     endOfCurrentWeek: LocalDate,
@@ -619,88 +673,90 @@ private fun AllTimeRow(
     val topStreak = remember(state.startEpochDay, state.failureEpochDays, today) {
         longestCleanStreak(state.startEpochDay, today, state.failureEpochDays)
     }
-    val contentColor = MaterialTheme.colorScheme.onBackground
-    val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val resets = remember(state.startEpochDay, state.failureEpochDays, today) {
+        state.failureEpochDays.count { it in state.startEpochDay..today }
+    }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "All Time",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = contentColor,
-            modifier = Modifier.padding(horizontal = 20.dp),
-        )
+    HomeCard {
+        Text("All Time", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(14.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 20.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(StreakOrangeDeep),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = Color.Black.copy(alpha = 0.85f),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Porn-free",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = contentColor,
-                )
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "$cleanDays successful",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = mutedColor,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.LocalFireDepartment,
-                        contentDescription = "Current streak",
-                        tint = StreakOrangeDeep,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(3.dp))
-                    Text(streak.toString(), style = MaterialTheme.typography.bodySmall, color = mutedColor)
-                    Spacer(Modifier.width(10.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.BarChart,
-                        contentDescription = "Top streak",
-                        tint = StreakOrangeDeep,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(3.dp))
-                    Text(topStreak.toString(), style = MaterialTheme.typography.bodySmall, color = mutedColor)
-                }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            StatBlock("Clean days", cleanDays.toString(), Modifier.weight(1f))
+            StatBlock("Best streak", topStreak.toString(), Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            StatBlock("Current", streak.toString(), Modifier.weight(1f))
+            StatBlock("Resets", resets.toString(), Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(18.dp))
         ContributionGrid(
             createdAtEpochDay = state.startEpochDay,
             failedDays = state.failureEpochDays,
             today = today,
             endOfCurrentWeek = endOfCurrentWeek,
             accent = StreakOrangeDeep,
-            emptyTint = MaterialTheme.colorScheme.surfaceContainerHigh,
+            emptyTint = MaterialTheme.colorScheme.surfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun StatBlock(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ProtectionStatusCard(
+    blocker: BlockerState,
+    onManageClick: () -> Unit,
+) {
+    val hasRules = blocker.blockAllPornSites || blocker.customSites.isNotEmpty()
+    val active = blocker.blockerEnabled && hasRules
+    HomeCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Protection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = when {
+                        active -> "Blocker active"
+                        hasRules -> "Rules ready, blocker off"
+                        else -> "No blocker rules enabled"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onManageClick) { Text("Manage") }
+        }
     }
 }
 
 private val CELL_SIZE = 12.dp
 private val CELL_GAP = 3.dp
-private val GRID_LEFT_PADDING = 20.dp
-private val GRID_RIGHT_PADDING = 12.dp
+private val GRID_SIDE_PADDING = 0.dp
 
 @Composable
 private fun ContributionGrid(
@@ -713,7 +769,7 @@ private fun ContributionGrid(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val columnsThatFit = run {
-            val available = maxWidth - GRID_LEFT_PADDING - GRID_RIGHT_PADDING
+            val available = maxWidth - (GRID_SIDE_PADDING * 2)
             val columnPitch = CELL_SIZE + CELL_GAP
             ((available + CELL_GAP) / columnPitch).toInt().coerceAtLeast(1)
         }
@@ -730,7 +786,7 @@ private fun ContributionGrid(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (needsScroll) Modifier.horizontalScroll(scrollState) else Modifier)
-                .padding(start = GRID_LEFT_PADDING, end = GRID_RIGHT_PADDING),
+                .padding(horizontal = GRID_SIDE_PADDING),
             horizontalArrangement = Arrangement.End,
         ) {
             for (weeksBack in (weeksAvailable - 1) downTo 0) {
@@ -808,15 +864,7 @@ private fun SobrietyCard(streakDays: Long) {
     }
 }
 
-private fun currentWeek(today: LocalDate, weekStart: WeekStart): List<LocalDate> {
-    val startDay = when (weekStart) {
-        WeekStart.Sunday -> DayOfWeek.SUNDAY
-        else -> DayOfWeek.MONDAY
-    }
-    val daysSinceStart = ((today.dayOfWeek.value - startDay.value) % 7 + 7) % 7
-    val start = today.minusDays(daysSinceStart.toLong())
-    return (0..6).map { start.plusDays(it.toLong()) }
-}
+private fun previousSevenDays(today: Long): List<Long> = (6 downTo 0).map { today - it }
 
 @Composable
 private fun BlockerScreen(
