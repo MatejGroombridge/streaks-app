@@ -29,8 +29,8 @@ android {
         applicationId = "dev.matejgroombridge.streaks"
         minSdk = 26          // Android 8.0+ (covers ~95% of devices, allows modern APIs)
         targetSdk = 35       // Android 15
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.1.0"
     }
 
     signingConfigs {

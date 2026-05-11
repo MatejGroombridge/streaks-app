@@ -1,6 +1,11 @@
 # Changelog
 
 
+## v1.1.0 — 2026-05-11
+
+Home page UI refactor
+
+
 ## v1.0.0 — 2026-05-10
 
 Initial working implementation
