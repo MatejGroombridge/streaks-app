@@ -55,8 +55,8 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Public
@@ -173,7 +173,6 @@ private fun StreaksApp(settingsViewModel: SettingsViewModel) {
         )
         null -> HomeScreen(
             state = streakState,
-            settings = settings,
             viewModel = streakViewModel,
             padding = PaddingValues(),
             onBlockerClick = { detailScreen = DetailScreen.Blocker },
@@ -333,41 +332,21 @@ private fun DayCellShape(
 }
 
 @Composable
-private fun PastWeekDialog(
-    state: StreakState,
-    weekStart: WeekStart,
-    onSetFailed: (Long, Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val today = LocalDate.now().toEpochDay()
-    val days = remember(today) { previousSevenDays(today) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Past Week") },
-        text = {
-            PastWeekRow(
-                failedDays = state.failureEpochDays,
-                days = days,
-                today = today,
-                onSetFailed = onSetFailed,
-            )
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
-}
-
-@Composable
 private fun HomeScreen(
     state: StreakState,
-    settings: AppSettings,
     viewModel: StreakViewModel,
     padding: PaddingValues,
     onBlockerClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
-    var showPastWeek by remember { mutableStateOf(false) }
+    var showPastWeekManually by remember { mutableStateOf(false) }
     val today = LocalDate.now().toEpochDay()
+    val pastWeekDays = remember(today) { previousSevenDays(today) }
+    val hasRecentFailure = remember(state.failureEpochDays, pastWeekDays) {
+        pastWeekDays.any { it in state.failureEpochDays }
+    }
+    val showPastWeek = hasRecentFailure || showPastWeekManually
     val todayDate = remember(today) { LocalDate.ofEpochDay(today) }
     val endOfCurrentWeek = remember(todayDate) {
         val daysAfterMon = ((todayDate.dayOfWeek.value - DayOfWeek.MONDAY.value) + 7) % 7
@@ -396,30 +375,27 @@ private fun HomeScreen(
                 onResetClick = { showResetConfirm = true },
             )
         }
-        item {
-            PastWeekCard(
-                failedDays = state.failureEpochDays,
-                days = previousSevenDays(today),
-                today = today,
-                onEditClick = { showPastWeek = true },
-            )
+        if (showPastWeek) {
+            item {
+                PastWeekCard(
+                    failedDays = state.failureEpochDays,
+                    days = pastWeekDays,
+                    today = today,
+                    editable = true,
+                    collapsible = !hasRecentFailure,
+                    onSetFailed = viewModel::setFailure,
+                    onToggleWeeklyView = { showPastWeekManually = false },
+                )
+            }
         }
         item {
             AllTimeCard(
                 state = state,
                 today = today,
                 endOfCurrentWeek = endOfCurrentWeek,
+                onShowWeeklyView = if (showPastWeek) null else { { showPastWeekManually = true } },
             )
         }
-    }
-
-    if (showPastWeek) {
-        PastWeekDialog(
-            state = state,
-            weekStart = settings.weekStart,
-            onSetFailed = viewModel::setFailure,
-            onDismiss = { showPastWeek = false },
-        )
     }
 
     if (showResetConfirm) {
@@ -502,8 +478,8 @@ private fun CurrentStreakCard(days: Long, onResetClick: () -> Unit) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
@@ -511,28 +487,24 @@ private fun CurrentStreakCard(days: Long, onResetClick: () -> Unit) {
                     Icons.Outlined.LocalFireDepartment,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(38.dp),
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Current streak", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = days.toString(),
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (days == 1L) "day" else "days",
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        }
-        Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = days.toString(),
-                style = MaterialTheme.typography.displayLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = if (days == 1L) "day" else "days",
-                modifier = Modifier.padding(bottom = 9.dp),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         Spacer(Modifier.height(18.dp))
         Button(
@@ -555,13 +527,18 @@ private fun PastWeekCard(
     failedDays: Set<Long>,
     days: List<Long>,
     today: Long,
-    onEditClick: () -> Unit,
+    editable: Boolean,
+    collapsible: Boolean,
+    onSetFailed: (Long, Boolean) -> Unit,
+    onToggleWeeklyView: () -> Unit,
 ) {
     HomeCard {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Past week", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            IconButton(onClick = onEditClick) {
-                Icon(Icons.Outlined.Edit, contentDescription = "Edit past week")
+            if (collapsible) {
+                IconButton(onClick = onToggleWeeklyView) {
+                    Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = "Hide weekly view")
+                }
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -571,10 +548,13 @@ private fun PastWeekCard(
         ) {
             days.forEach { epochDay ->
                 val date = LocalDate.ofEpochDay(epochDay)
-                WeekPreviewDay(
+                val failed = epochDay in failedDays
+                InlineWeekDay(
                     date = date,
-                    failed = epochDay in failedDays,
+                    failed = failed,
                     isToday = epochDay == today,
+                    editable = editable,
+                    onClick = { onSetFailed(epochDay, !failed) },
                 )
             }
         }
@@ -582,10 +562,12 @@ private fun PastWeekCard(
 }
 
 @Composable
-private fun WeekPreviewDay(
+private fun InlineWeekDay(
     date: LocalDate,
     failed: Boolean,
     isToday: Boolean,
+    editable: Boolean,
+    onClick: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -598,7 +580,8 @@ private fun WeekPreviewDay(
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (failed) StreakOrangeDeep else MaterialTheme.colorScheme.surfaceVariant),
+                .background(if (failed) StreakOrangeDeep else MaterialTheme.colorScheme.surfaceVariant)
+                .then(if (editable) Modifier.clickable(onClick = onClick) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             if (failed) {
@@ -665,6 +648,7 @@ private fun AllTimeCard(
     state: StreakState,
     today: Long,
     endOfCurrentWeek: LocalDate,
+    onShowWeeklyView: (() -> Unit)? = null,
 ) {
     val cleanDays = remember(state.startEpochDay, state.failureEpochDays, today) {
         (state.startEpochDay..today).count { it !in state.failureEpochDays }
@@ -678,7 +662,14 @@ private fun AllTimeCard(
     }
 
     HomeCard {
-        Text("All Time", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Stats", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (onShowWeeklyView != null) {
+                IconButton(onClick = onShowWeeklyView) {
+                    Icon(Icons.Outlined.CalendarMonth, contentDescription = "Show weekly view")
+                }
+            }
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             StatBlock("Clean days", cleanDays.toString(), Modifier.weight(1f))
