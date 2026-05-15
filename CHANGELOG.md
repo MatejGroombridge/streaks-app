@@ -1,6 +1,11 @@
 # Changelog
 
 
+## v1.2.0 — 2026-05-15
+
+Updated Home UI - hideable weekly view
+
+
 ## v1.1.0 — 2026-05-11
 
 Home page UI refactor
