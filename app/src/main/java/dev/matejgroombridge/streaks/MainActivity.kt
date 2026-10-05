@@ -91,9 +91,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -385,8 +389,7 @@ private fun HomeScreen(
                     today = today,
                     editable = true,
                     collapsible = !hasRecentFailure,
-                    showNames = showHabitNames,
-                    onSetFailed = viewModel::setFailure,
+                    onSetDay = viewModel::setDayFailures,
                     onToggleWeeklyView = { showPastWeekManually = false },
                 )
             }
@@ -625,8 +628,7 @@ private fun PastWeekCard(
     today: Long,
     editable: Boolean,
     collapsible: Boolean,
-    showNames: Boolean,
-    onSetFailed: (HabitSlot, Long, Boolean) -> Unit,
+    onSetDay: (day: Long, primaryFailed: Boolean, secondaryFailed: Boolean) -> Unit,
     onToggleWeeklyView: () -> Unit,
 ) {
     HomeCard {
@@ -650,15 +652,25 @@ private fun PastWeekCard(
                     secondary = secondary,
                     isToday = epochDay == today,
                     editable = editable,
-                    showNames = showNames,
-                    onSetFailed = { slot, failed -> onSetFailed(slot, epochDay, failed) },
+                    onSet = { primaryFailed, secondaryFailed -> onSetDay(epochDay, primaryFailed, secondaryFailed) },
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Tap order for a past-week day: clean → primary broken → secondary broken → both broken → clean.
+ * Without a secondary habit a tap simply toggles the primary one.
+ */
+private fun nextDayState(primaryFailed: Boolean, secondaryFailed: Boolean, hasSecondary: Boolean): Pair<Boolean, Boolean> = when {
+    !hasSecondary -> !primaryFailed to false
+    !primaryFailed && !secondaryFailed -> true to false
+    primaryFailed && !secondaryFailed -> false to true
+    !primaryFailed && secondaryFailed -> true to true
+    else -> false to false
+}
+
 @Composable
 private fun InlineWeekDay(
     date: LocalDate,
@@ -666,13 +678,14 @@ private fun InlineWeekDay(
     secondary: BadHabit?,
     isToday: Boolean,
     editable: Boolean,
-    showNames: Boolean,
-    onSetFailed: (HabitSlot, Boolean) -> Unit,
+    onSet: (primaryFailed: Boolean, secondaryFailed: Boolean) -> Unit,
 ) {
     val epochDay = date.toEpochDay()
     val failed = epochDay in primary.failureEpochDays
     val secondaryFailed = secondary != null && epochDay in secondary.failureEpochDays
-    var menuOpen by remember { mutableStateOf(false) }
+    val primaryColors = primary.palette
+    val secondaryColors = secondary?.palette
+    val emptyColor = MaterialTheme.colorScheme.surfaceVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
@@ -680,76 +693,60 @@ private fun InlineWeekDay(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
         )
-        Box {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (failed) primary.palette.accent else MaterialTheme.colorScheme.surfaceVariant)
-                    .then(
-                        when {
-                            !editable -> Modifier
-                            // Tap still toggles the primary habit; long-press reaches the secondary one.
-                            secondary != null -> Modifier.combinedClickable(
-                                onClick = { onSetFailed(HabitSlot.Primary, !failed) },
-                                onLongClick = { menuOpen = true },
-                            )
-                            else -> Modifier.clickable { onSetFailed(HabitSlot.Primary, !failed) }
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (failed) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Reset day", tint = primary.palette.onColor, modifier = Modifier.size(17.dp))
-                } else {
-                    Text(
-                        text = date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .drawBehind {
+                    when {
+                        failed && secondaryColors != null && secondaryFailed -> {
+                            // Both broken: split diagonally, primary top-left and secondary bottom-right.
+                            drawRect(primaryColors.accent)
+                            val lowerRight = Path().apply {
+                                moveTo(size.width, 0f)
+                                lineTo(size.width, size.height)
+                                lineTo(0f, size.height)
+                                close()
+                            }
+                            drawPath(lowerRight, secondaryColors.accent)
+                        }
+                        failed -> drawRect(primaryColors.accent)
+                        secondaryColors != null && secondaryFailed -> drawRect(secondaryColors.accent)
+                        else -> drawRect(emptyColor)
+                    }
                 }
-                if (secondary != null && secondaryFailed) {
-                    SecondaryFailureDot(
-                        colors = secondary.palette,
-                        size = 6.dp,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 3.dp),
-                    )
+                .semantics {
+                    stateDescription = when {
+                        failed && secondaryFailed -> "Both habits broken"
+                        failed -> "Primary habit broken"
+                        secondaryFailed -> "Secondary habit broken"
+                        else -> "Clean"
+                    }
                 }
-            }
-            if (secondary != null) {
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DayFailureMenuItem(
-                        habit = primary,
-                        label = if (showNames) primary.name else "Primary",
-                        failed = failed,
-                        onClick = { menuOpen = false; onSetFailed(HabitSlot.Primary, !failed) },
-                    )
-                    DayFailureMenuItem(
-                        habit = secondary,
-                        label = if (showNames) secondary.name else "Secondary",
-                        failed = secondaryFailed,
-                        onClick = { menuOpen = false; onSetFailed(HabitSlot.Secondary, !secondaryFailed) },
-                    )
-                }
-            }
+                .then(
+                    if (editable) {
+                        Modifier.clickable {
+                            val (nextPrimary, nextSecondary) = nextDayState(failed, secondaryFailed, hasSecondary = secondary != null)
+                            onSet(nextPrimary, nextSecondary)
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = date.dayOfMonth.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = when {
+                    failed -> primaryColors.onColor
+                    secondaryColors != null && secondaryFailed -> secondaryColors.onColor
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontWeight = if (failed || secondaryFailed) FontWeight.SemiBold else FontWeight.Normal,
+            )
         }
     }
-}
-
-@Composable
-private fun DayFailureMenuItem(
-    habit: BadHabit,
-    label: String,
-    failed: Boolean,
-    onClick: () -> Unit,
-) {
-    DropdownMenuItem(
-        text = { Text("$label: ${if (failed) "Mark Clean" else "Mark Failure"}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = { HabitBadge(habit = habit, size = 24.dp, iconSize = 16.dp, cornerRadius = 8.dp) },
-        onClick = onClick,
-    )
 }
 
 /** Secondary habit failures render as a dot so they never hide the primary habit's filled square. */

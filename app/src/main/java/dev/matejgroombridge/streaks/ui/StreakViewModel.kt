@@ -24,6 +24,8 @@ class StreakViewModel(private val repository: StreakRepository) : ViewModel() {
 
     fun recordFailureToday(slot: HabitSlot) = viewModelScope.launch { repository.recordFailure(slot) }
     fun setFailure(slot: HabitSlot, day: Long, failed: Boolean) = viewModelScope.launch { repository.setFailure(slot, day, failed) }
+    fun setDayFailures(day: Long, primaryFailed: Boolean, secondaryFailed: Boolean) =
+        viewModelScope.launch { repository.setDayFailures(day, primaryFailed, secondaryFailed) }
     fun resetStartDate() = viewModelScope.launch { repository.resetStartDate(LocalDate.now().toEpochDay()) }
     fun saveHabit(slot: HabitSlot, name: String, iconKey: String, colorKey: String) =
         viewModelScope.launch { repository.saveHabit(slot, name, iconKey, colorKey) }

@@ -41,12 +41,21 @@ class StreakRepository(private val context: Context) {
     }
 
     suspend fun setFailure(slot: HabitSlot, day: Long, failed: Boolean) {
-        val keys = keysFor(slot)
+        context.streakDataStore.edit { prefs -> writeFailure(prefs, keysFor(slot), day, failed) }
+    }
+
+    /** Sets both habits for [day] in one write, so the UI never sees a half-applied change. */
+    suspend fun setDayFailures(day: Long, primaryFailed: Boolean, secondaryFailed: Boolean) {
         context.streakDataStore.edit { prefs ->
-            val current = parseLongSet(prefs[keys.failureDays]).toMutableSet()
-            if (failed) current += day else current -= day
-            prefs[keys.failureDays] = current.sorted().joinToString(",")
+            writeFailure(prefs, PRIMARY, day, primaryFailed)
+            if (prefs[SECONDARY.name] != null) writeFailure(prefs, SECONDARY, day, secondaryFailed)
         }
+    }
+
+    private fun writeFailure(prefs: MutablePreferences, keys: HabitKeys, day: Long, failed: Boolean) {
+        val current = parseLongSet(prefs[keys.failureDays]).toMutableSet()
+        if (failed) current += day else current -= day
+        prefs[keys.failureDays] = current.sorted().joinToString(",")
     }
 
     suspend fun resetStartDate(day: Long = LocalDate.now().toEpochDay()) {
