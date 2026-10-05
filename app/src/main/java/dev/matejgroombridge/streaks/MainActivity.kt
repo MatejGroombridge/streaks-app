@@ -504,28 +504,18 @@ private fun CurrentStreakCard(
     onResetClick: (HabitSlot) -> Unit,
 ) {
     HomeCard {
-        if (secondary == null) {
-            StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
+        StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
+        Spacer(Modifier.height(18.dp))
+        ResetStreakButton(
+            label = "Reset streak",
+            icon = Icons.Outlined.WarningAmber,
+            colors = primary.palette,
+            onClick = { onResetClick(HabitSlot.Primary) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (secondary != null) {
             Spacer(Modifier.height(18.dp))
-            ResetStreakButton(
-                label = "Reset streak",
-                icon = Icons.Outlined.WarningAmber,
-                colors = primary.palette,
-                onClick = { onResetClick(HabitSlot.Primary) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            // With two habits, each reset sits at the end of its own habit's row.
-            StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames) {
-                ResetStreakButton(
-                    label = "Reset",
-                    icon = Icons.Outlined.WarningAmber,
-                    colors = primary.palette,
-                    onClick = { onResetClick(HabitSlot.Primary) },
-                    compact = true,
-                )
-            }
-            Spacer(Modifier.height(14.dp))
+            // The secondary habit's reset sits on its own row, sized down to match it.
             StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
                 ResetStreakButton(
                     label = "Reset",
