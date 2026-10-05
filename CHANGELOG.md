@@ -1,6 +1,11 @@
 # Changelog
 
 
+## v2.0.0 — 2026-10-05
+
+Custom habits and a secondary habit
+
+
 ## v1.2.0 — 2026-05-15
 
 Updated Home UI - hideable weekly view
