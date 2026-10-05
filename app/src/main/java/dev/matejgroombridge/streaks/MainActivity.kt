@@ -96,9 +96,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -501,10 +504,28 @@ private fun CurrentStreakCard(
     onResetClick: (HabitSlot) -> Unit,
 ) {
     HomeCard {
-        StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
-        if (secondary != null) {
+        if (secondary == null) {
+            StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
+            Spacer(Modifier.height(18.dp))
+            ResetStreakButton(
+                label = "Reset streak",
+                icon = Icons.Outlined.WarningAmber,
+                colors = primary.palette,
+                onClick = { onResetClick(HabitSlot.Primary) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            // With two habits, each reset sits at the end of its own habit's row.
+            StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames) {
+                ResetStreakButton(
+                    label = "Reset",
+                    icon = Icons.Outlined.WarningAmber,
+                    colors = primary.palette,
+                    onClick = { onResetClick(HabitSlot.Primary) },
+                    compact = true,
+                )
+            }
             Spacer(Modifier.height(14.dp))
-            // The secondary habit's reset sits on its own row, sized down to match it.
             StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
                 ResetStreakButton(
                     label = "Reset",
@@ -515,14 +536,6 @@ private fun CurrentStreakCard(
                 )
             }
         }
-        Spacer(Modifier.height(18.dp))
-        ResetStreakButton(
-            label = "Reset streak",
-            icon = Icons.Outlined.WarningAmber,
-            colors = primary.palette,
-            onClick = { onResetClick(HabitSlot.Primary) },
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -555,23 +568,75 @@ private fun StreakCountRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = days.toString(),
-                    style = if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.width(if (compact) 6.dp else 8.dp))
-                Text(
-                    text = if (days == 1L) "day" else "days",
-                    modifier = Modifier.padding(bottom = if (compact) 4.dp else 8.dp),
-                    style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            StreakDayCount(days = days, compact = compact)
         }
         trailing?.invoke()
+    }
+}
+
+private class CountSize(val count: ComposeTextStyle, val unit: ComposeTextStyle, val unitBottomPadding: Dp)
+
+/**
+ * The day count and its unit. A reset pill can share the row, so a long count steps
+ * down a size rather than wrapping, and as a last resort the unit moves underneath.
+ */
+@Composable
+private fun StreakDayCount(days: Long, compact: Boolean) {
+    val type = MaterialTheme.typography
+    // Largest first; the first entry is the card's normal look.
+    val sizes = if (compact) {
+        listOf(CountSize(type.headlineLarge, type.titleMedium, 4.dp), CountSize(type.headlineMedium, type.bodyMedium, 3.dp))
+    } else {
+        listOf(
+            CountSize(type.displayMedium, type.headlineSmall, 8.dp),
+            CountSize(type.displaySmall, type.titleLarge, 6.dp),
+            CountSize(type.headlineLarge, type.titleMedium, 4.dp),
+        )
+    }
+    val count = days.toString()
+    val unit = if (days == 1L) "day" else "days"
+    val gap = if (compact) 6.dp else 8.dp
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints {
+        val gapPx = with(LocalDensity.current) { gap.roundToPx() }
+        fun countWidth(size: CountSize) = measurer.measure(count, size.count.copy(fontWeight = FontWeight.SemiBold)).size.width
+        val fitting = sizes.firstOrNull { size ->
+            countWidth(size) + gapPx + measurer.measure(unit, size.unit).size.width <= constraints.maxWidth
+        }
+        // Stacked, the count has the whole width to itself, so it can stay larger.
+        val size = fitting ?: sizes.firstOrNull { countWidth(it) <= constraints.maxWidth } ?: sizes.last()
+        val countText = @Composable {
+            Text(
+                text = count,
+                style = size.count,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        val unitText = @Composable { modifier: Modifier ->
+            Text(
+                text = unit,
+                modifier = modifier,
+                style = size.unit,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        if (fitting != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                countText()
+                Spacer(Modifier.width(gap))
+                unitText(Modifier.padding(bottom = size.unitBottomPadding))
+            }
+        } else {
+            Column {
+                countText()
+                unitText(Modifier)
+            }
+        }
     }
 }
 
