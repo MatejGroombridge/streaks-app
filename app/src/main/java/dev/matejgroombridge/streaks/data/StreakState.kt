@@ -31,11 +31,12 @@ data class BadHabit(
     }
 
     companion object {
-        // The app only tracked porn before habits became editable, so these
-        // defaults reproduce exactly what existing users already see.
+        // The app only tracked porn before habits became editable, so existing
+        // users keep that name and the fire icon; peach is the closest palette
+        // entry to the original orange.
         const val DEFAULT_NAME = "Porn"
         const val DEFAULT_ICON_KEY = "fire"
-        const val DEFAULT_COLOR_KEY = "orange"
+        const val DEFAULT_COLOR_KEY = "peach"
         const val MAX_NAME_LENGTH = 40
     }
 }

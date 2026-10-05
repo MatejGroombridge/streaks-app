@@ -36,11 +36,22 @@ import androidx.compose.material.icons.outlined.WineBar
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.matejgroombridge.streaks.data.BadHabit
-import dev.matejgroombridge.streaks.ui.theme.StreakOrangeDeep
 
 data class HabitIcon(val key: String, val label: String, val icon: ImageVector)
 
-data class HabitColor(val key: String, val label: String, val color: Color)
+/**
+ * One entry of the shared app-family palette. [light] and [dark] are card
+ * backgrounds for each theme, [accent] is the stronger fill for icon tiles,
+ * chips and failure marks, and [onColor] is legible over [light] and [accent].
+ */
+data class HabitColor(
+    val key: String,
+    val label: String,
+    val light: Color,
+    val dark: Color,
+    val accent: Color,
+    val onColor: Color,
+)
 
 /** Curated identity icons for habits. Persisted by key, so append rather than rename. */
 object HabitIcons {
@@ -88,24 +99,24 @@ object HabitIcons {
 }
 
 /**
- * Saturated accents that keep white glyphs legible, ordered around the colour
- * wheel so neighbouring chips look related. Persisted by key.
+ * The canonical palette shared by every app in the family, ordered around the
+ * colour wheel so neighbouring chips look related. Persisted by key.
  */
 object HabitColors {
     val all: List<HabitColor> = listOf(
-        HabitColor("red", "Red", Color(0xFFD93F3F)),
-        HabitColor(BadHabit.DEFAULT_COLOR_KEY, "Orange", StreakOrangeDeep),
-        HabitColor("amber", "Amber", Color(0xFFC98A00)),
-        HabitColor("green", "Green", Color(0xFF2E9D57)),
-        HabitColor("teal", "Teal", Color(0xFF00968A)),
-        HabitColor("blue", "Blue", Color(0xFF2F7CE0)),
-        HabitColor("purple", "Purple", Color(0xFF8358D6)),
-        HabitColor("pink", "Pink", Color(0xFFD6458C)),
+        HabitColor("blush", "Blush", Color(0xFFFFE0E6), Color(0xFF5A3A42), Color(0xFFF7A6B5), Color(0xFF3A1F25)),
+        HabitColor("peach", "Peach", Color(0xFFFFE3D1), Color(0xFF5A3F30), Color(0xFFFFB48A), Color(0xFF3A2418)),
+        HabitColor("butter", "Butter", Color(0xFFFFF4C2), Color(0xFF55502B), Color(0xFFFFE066), Color(0xFF3A330A)),
+        HabitColor("mint", "Mint", Color(0xFFD1F0DA), Color(0xFF2E4D3A), Color(0xFF8DD6A4), Color(0xFF143222)),
+        HabitColor("teal", "Teal", Color(0xFFCFE8E4), Color(0xFF2F4D49), Color(0xFF8DCDC4), Color(0xFF143230)),
+        HabitColor("sky", "Sky", Color(0xFFD3E8F5), Color(0xFF2F4756), Color(0xFF8FC4E0), Color(0xFF12303F)),
+        HabitColor("lavender", "Lavender", Color(0xFFE3DAF5), Color(0xFF3F354F), Color(0xFFB7A5DD), Color(0xFF231A38)),
+        HabitColor("fog", "Fog", Color(0xFFE2E5EA), Color(0xFF40454D), Color(0xFFB6BCC6), Color(0xFF22262D)),
     )
 
-    private val default = all.first { it.key == BadHabit.DEFAULT_COLOR_KEY }
+    private val defaultEntry = all.first { it.key == BadHabit.DEFAULT_COLOR_KEY }
 
-    fun entry(key: String): HabitColor = all.firstOrNull { it.key == key } ?: default
+    fun entry(key: String): HabitColor = all.firstOrNull { it.key == key } ?: defaultEntry
 
     /** The colour across the wheel from [key], so a new secondary habit contrasts with the primary. */
     fun contrasting(key: String): HabitColor {
@@ -116,4 +127,4 @@ object HabitColors {
 
 val BadHabit.icon: ImageVector get() = HabitIcons.entry(iconKey).icon
 
-val BadHabit.color: Color get() = HabitColors.entry(colorKey).color
+val BadHabit.palette: HabitColor get() = HabitColors.entry(colorKey)

@@ -114,8 +114,8 @@ import dev.matejgroombridge.streaks.ui.components.HabitColor
 import dev.matejgroombridge.streaks.ui.components.HabitColors
 import dev.matejgroombridge.streaks.ui.components.HabitIcon
 import dev.matejgroombridge.streaks.ui.components.HabitIcons
-import dev.matejgroombridge.streaks.ui.components.color
 import dev.matejgroombridge.streaks.ui.components.icon
+import dev.matejgroombridge.streaks.ui.components.palette
 import dev.matejgroombridge.streaks.ui.theme.AppTheme
 import dev.matejgroombridge.streaks.ui.theme.StreakOrangeDeep
 import kotlinx.coroutines.launch
@@ -411,8 +411,8 @@ private fun HomeScreen(
                         resetConfirmSlot = null
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = confirmHabit.color,
-                        contentColor = Color.White,
+                        containerColor = confirmHabit.palette.accent,
+                        contentColor = confirmHabit.palette.onColor,
                     ),
                 ) { Text("I slipped today") }
             },
@@ -476,14 +476,14 @@ private fun CurrentStreakCard(
         StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
         if (secondary != null) {
             Spacer(Modifier.height(14.dp))
-            StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames)
+            StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true)
         }
         Spacer(Modifier.height(18.dp))
         if (secondary == null) {
             ResetStreakButton(
                 label = "Reset streak",
                 icon = Icons.Outlined.WarningAmber,
-                color = primary.color,
+                colors = primary.palette,
                 onClick = { onResetClick(HabitSlot.Primary) },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -493,14 +493,14 @@ private fun CurrentStreakCard(
                 ResetStreakButton(
                     label = "Reset",
                     icon = primary.icon,
-                    color = primary.color,
+                    colors = primary.palette,
                     onClick = { onResetClick(HabitSlot.Primary) },
                     modifier = Modifier.weight(1f),
                 )
                 ResetStreakButton(
                     label = "Reset",
                     icon = secondary.icon,
-                    color = secondary.color,
+                    colors = secondary.palette,
                     onClick = { onResetClick(HabitSlot.Secondary) },
                     modifier = Modifier.weight(1f),
                 )
@@ -509,32 +509,24 @@ private fun CurrentStreakCard(
     }
 }
 
+/** A habit's streak. The secondary habit uses the [compact] size so the primary stays the focus. */
 @Composable
-private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean) {
+private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean, compact: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(habit.color.copy(alpha = 0.18f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                habit.icon,
-                contentDescription = null,
-                tint = habit.color,
-                modifier = Modifier.size(38.dp),
-            )
+        if (compact) {
+            HabitBadge(habit = habit, size = 44.dp, iconSize = 26.dp, cornerRadius = 14.dp)
+        } else {
+            HabitBadge(habit = habit, size = 64.dp, iconSize = 38.dp, cornerRadius = 20.dp)
         }
         Column {
             if (showName) {
                 Text(
                     text = habit.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -543,15 +535,15 @@ private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = days.toString(),
-                    style = MaterialTheme.typography.displayMedium,
+                    style = if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(if (compact) 6.dp else 8.dp))
                 Text(
                     text = if (days == 1L) "day" else "days",
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = if (compact) 4.dp else 8.dp),
+                    style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -559,11 +551,30 @@ private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean) {
     }
 }
 
+/** A habit's identity tile: its icon on the palette accent, as in the rest of the app family. */
+@Composable
+private fun HabitBadge(habit: BadHabit, size: Dp, iconSize: Dp, cornerRadius: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(habit.palette.accent),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            habit.icon,
+            contentDescription = null,
+            tint = habit.palette.onColor,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
 @Composable
 private fun ResetStreakButton(
     label: String,
     icon: ImageVector,
-    color: Color,
+    colors: HabitColor,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -571,8 +582,8 @@ private fun ResetStreakButton(
         onClick = onClick,
         modifier = modifier,
         colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            contentColor = Color.White,
+            containerColor = colors.accent,
+            contentColor = colors.onColor,
         ),
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -649,7 +660,7 @@ private fun InlineWeekDay(
                 modifier = Modifier
                     .size(34.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (failed) primary.color else MaterialTheme.colorScheme.surfaceVariant)
+                    .background(if (failed) primary.palette.accent else MaterialTheme.colorScheme.surfaceVariant)
                     .then(
                         when {
                             !editable -> Modifier
@@ -664,7 +675,7 @@ private fun InlineWeekDay(
                 contentAlignment = Alignment.Center,
             ) {
                 if (failed) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Reset day", tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Outlined.Close, contentDescription = "Reset day", tint = primary.palette.onColor, modifier = Modifier.size(17.dp))
                 } else {
                     Text(
                         text = date.dayOfMonth.toString(),
@@ -674,8 +685,7 @@ private fun InlineWeekDay(
                 }
                 if (secondary != null && secondaryFailed) {
                     SecondaryFailureDot(
-                        color = secondary.color,
-                        onFilledCell = failed,
+                        colors = secondary.palette,
                         size = 6.dp,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -712,7 +722,7 @@ private fun DayFailureMenuItem(
 ) {
     DropdownMenuItem(
         text = { Text("$label: ${if (failed) "Mark Clean" else "Mark Failure"}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = { Icon(habit.icon, contentDescription = null, tint = habit.color) },
+        leadingIcon = { HabitBadge(habit = habit, size = 24.dp, iconSize = 16.dp, cornerRadius = 8.dp) },
         onClick = onClick,
     )
 }
@@ -720,8 +730,7 @@ private fun DayFailureMenuItem(
 /** Secondary habit failures render as a dot so they never hide the primary habit's filled square. */
 @Composable
 private fun SecondaryFailureDot(
-    color: Color,
-    onFilledCell: Boolean,
+    colors: HabitColor,
     size: Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -729,9 +738,10 @@ private fun SecondaryFailureDot(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(color)
-            // A white ring keeps the dot visible on a square already filled by the primary habit.
-            .then(if (onFilledCell) Modifier.border(1.dp, Color.White, CircleShape) else Modifier),
+            .background(colors.accent)
+            // The pastel accents are soft at this size; the outline keeps the dot readable on
+            // empty cells and on squares already filled by the primary habit.
+            .border(1.dp, colors.onColor, CircleShape),
     )
 }
 
@@ -828,8 +838,8 @@ private fun AllTimeCard(
             secondaryFailedDays = secondary?.failureEpochDays.orEmpty(),
             today = today,
             endOfCurrentWeek = endOfCurrentWeek,
-            accent = primary.color,
-            secondaryAccent = secondary?.color ?: Color.Unspecified,
+            accent = primary.palette.accent,
+            secondaryColors = secondary?.palette,
             emptyTint = MaterialTheme.colorScheme.surfaceVariant,
         )
     }
@@ -862,7 +872,7 @@ private fun ContributionGrid(
     today: Long,
     endOfCurrentWeek: LocalDate,
     accent: Color,
-    secondaryAccent: Color,
+    secondaryColors: HabitColor?,
     emptyTint: Color,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -904,7 +914,7 @@ private fun ContributionGrid(
                             secondaryFailed = cellEpoch in secondaryFailedDays,
                             inactive = inFuture || beforeStart,
                             accent = accent,
-                            secondaryAccent = secondaryAccent,
+                            secondaryColors = secondaryColors,
                             emptyTint = emptyTint,
                         )
                     }
@@ -920,7 +930,7 @@ private fun GridCell(
     secondaryFailed: Boolean,
     inactive: Boolean,
     accent: Color,
-    secondaryAccent: Color,
+    secondaryColors: HabitColor?,
     emptyTint: Color,
 ) {
     Box(
@@ -936,8 +946,8 @@ private fun GridCell(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (secondaryFailed) {
-            SecondaryFailureDot(color = secondaryAccent, onFilledCell = failed, size = SECONDARY_DOT_SIZE)
+        if (secondaryFailed && secondaryColors != null) {
+            SecondaryFailureDot(colors = secondaryColors, size = SECONDARY_DOT_SIZE)
         }
     }
 }
@@ -1144,7 +1154,7 @@ private fun HabitSettingsRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (habit != null) {
-            Icon(habit.icon, contentDescription = null, tint = habit.color)
+            HabitBadge(habit = habit, size = 32.dp, iconSize = 20.dp, cornerRadius = 10.dp)
         } else {
             Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
@@ -1175,7 +1185,7 @@ private fun HabitEditorDialog(
     var name by remember { mutableStateOf(initial.name) }
     var iconKey by remember { mutableStateOf(initial.iconKey) }
     var colorKey by remember { mutableStateOf(initial.colorKey) }
-    val accent = HabitColors.entry(colorKey).color
+    val selectedColors = HabitColors.entry(colorKey)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1200,7 +1210,7 @@ private fun HabitEditorDialog(
                                 IconChoice(
                                     entry = entry,
                                     selected = entry.key == iconKey,
-                                    accent = accent,
+                                    colors = selectedColors,
                                     onClick = { iconKey = entry.key },
                                     modifier = Modifier.weight(1f),
                                 )
@@ -1252,7 +1262,7 @@ private fun EditorSection(title: String, content: @Composable ColumnScope.() -> 
 private fun IconChoice(
     entry: HabitIcon,
     selected: Boolean,
-    accent: Color,
+    colors: HabitColor,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1260,14 +1270,14 @@ private fun IconChoice(
         modifier = modifier
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(if (selected) accent else MaterialTheme.colorScheme.surfaceVariant)
+            .background(if (selected) colors.accent else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             entry.icon,
             contentDescription = entry.label,
-            tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (selected) colors.onColor else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -1284,12 +1294,12 @@ private fun ColorChoice(
         modifier = modifier
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(entry.color)
+            .background(entry.accent)
             .clickable(onClickLabel = entry.label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
-            Icon(Icons.Outlined.Check, contentDescription = "${entry.label} selected", tint = Color.White, modifier = Modifier.size(18.dp))
+            Icon(Icons.Outlined.Check, contentDescription = "${entry.label} selected", tint = entry.onColor, modifier = Modifier.size(18.dp))
         }
     }
 }
