@@ -504,42 +504,37 @@ private fun CurrentStreakCard(
         StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
         if (secondary != null) {
             Spacer(Modifier.height(14.dp))
-            StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true)
-        }
-        Spacer(Modifier.height(18.dp))
-        if (secondary == null) {
-            ResetStreakButton(
-                label = "Reset streak",
-                icon = Icons.Outlined.WarningAmber,
-                colors = primary.palette,
-                onClick = { onResetClick(HabitSlot.Primary) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            // Each button carries its habit's icon and colour so it still reads clearly when names are hidden.
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            // The secondary habit's reset sits on its own row, sized down to match it.
+            StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
                 ResetStreakButton(
                     label = "Reset",
-                    icon = primary.icon,
-                    colors = primary.palette,
-                    onClick = { onResetClick(HabitSlot.Primary) },
-                    modifier = Modifier.weight(1f),
-                )
-                ResetStreakButton(
-                    label = "Reset",
-                    icon = secondary.icon,
+                    icon = Icons.Outlined.WarningAmber,
                     colors = secondary.palette,
                     onClick = { onResetClick(HabitSlot.Secondary) },
-                    modifier = Modifier.weight(1f),
+                    compact = true,
                 )
             }
         }
+        Spacer(Modifier.height(18.dp))
+        ResetStreakButton(
+            label = "Reset streak",
+            icon = Icons.Outlined.WarningAmber,
+            colors = primary.palette,
+            onClick = { onResetClick(HabitSlot.Primary) },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 /** A habit's streak. The secondary habit uses the [compact] size so the primary stays the focus. */
 @Composable
-private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean, compact: Boolean = false) {
+private fun StreakCountRow(
+    habit: BadHabit,
+    days: Long,
+    showName: Boolean,
+    compact: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -550,7 +545,7 @@ private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean, compa
         } else {
             HabitBadge(habit = habit, size = 64.dp, iconSize = 38.dp, cornerRadius = 20.dp)
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             if (showName) {
                 Text(
                     text = habit.name,
@@ -576,6 +571,7 @@ private fun StreakCountRow(habit: BadHabit, days: Long, showName: Boolean, compa
                 )
             }
         }
+        trailing?.invoke()
     }
 }
 
@@ -605,6 +601,7 @@ private fun ResetStreakButton(
     colors: HabitColor,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     Button(
         onClick = onClick,
@@ -613,9 +610,10 @@ private fun ResetStreakButton(
             containerColor = colors.accent,
             contentColor = colors.onColor,
         ),
+        contentPadding = if (compact) PaddingValues(horizontal = 14.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding,
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
+        Icon(icon, contentDescription = null, modifier = Modifier.size(if (compact) 16.dp else 18.dp))
+        Spacer(Modifier.width(if (compact) 6.dp else 8.dp))
         Text(label)
     }
 }
