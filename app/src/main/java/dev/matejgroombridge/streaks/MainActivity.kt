@@ -760,10 +760,7 @@ private fun SecondaryFailureDot(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(colors.accent)
-            // The pastel accents are soft at this size; the outline keeps the dot readable on
-            // empty cells and on squares already filled by the primary habit.
-            .border(1.dp, colors.onColor, CircleShape),
+            .background(colors.accent),
     )
 }
 
