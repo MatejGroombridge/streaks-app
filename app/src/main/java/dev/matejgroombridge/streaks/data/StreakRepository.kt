@@ -10,11 +10,24 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 private val Context.streakDataStore: DataStore<Preferences> by preferencesDataStore(name = "streak_state")
 
 class StreakRepository(private val context: Context) {
+    // The single-habit version never saved its start date, so it silently became
+    // "today" on every launch. Falling back to the day the app was installed
+    // recovers when tracking really began for existing users.
+    @Suppress("DEPRECATION")
+    private val installEpochDay: Long by lazy {
+        runCatching {
+            val installedAt = context.packageManager.getPackageInfo(context.packageName, 0).firstInstallTime
+            Instant.ofEpochMilli(installedAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        }.getOrElse { LocalDate.now().toEpochDay() }
+    }
+
     val state: Flow<StreakState> = context.streakDataStore.data.map { prefs ->
         StreakState(
             primary = readHabit(prefs, PRIMARY),
@@ -63,13 +76,19 @@ class StreakRepository(private val context: Context) {
         context.streakDataStore.edit { prefs -> SECONDARY.removeAll(prefs) }
     }
 
-    private fun readHabit(prefs: Preferences, keys: HabitKeys) = BadHabit(
-        name = prefs[keys.name] ?: BadHabit.DEFAULT_NAME,
-        iconKey = prefs[keys.icon] ?: BadHabit.DEFAULT_ICON_KEY,
-        colorKey = prefs[keys.color] ?: BadHabit.DEFAULT_COLOR_KEY,
-        startEpochDay = prefs[keys.startDay] ?: LocalDate.now().toEpochDay(),
-        failureEpochDays = parseLongSet(prefs[keys.failureDays]),
-    )
+    private fun readHabit(prefs: Preferences, keys: HabitKeys): BadHabit {
+        val failures = parseLongSet(prefs[keys.failureDays])
+        val recordedStart = prefs[keys.startDay] ?: installEpochDay
+        return BadHabit(
+            name = prefs[keys.name] ?: BadHabit.DEFAULT_NAME,
+            iconKey = prefs[keys.icon] ?: BadHabit.DEFAULT_ICON_KEY,
+            colorKey = prefs[keys.color] ?: BadHabit.DEFAULT_COLOR_KEY,
+            // A failure logged before the start (e.g. from the past-week view) means
+            // tracking began earlier, and every stat must count from the same day.
+            startEpochDay = minOf(recordedStart, failures.minOrNull() ?: recordedStart),
+            failureEpochDays = failures,
+        )
+    }
 
     private fun keysFor(slot: HabitSlot): HabitKeys = when (slot) {
         HabitSlot.Primary -> PRIMARY

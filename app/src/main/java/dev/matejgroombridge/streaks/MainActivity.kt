@@ -83,6 +83,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -99,6 +100,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -118,9 +121,12 @@ import dev.matejgroombridge.streaks.ui.components.icon
 import dev.matejgroombridge.streaks.ui.components.palette
 import dev.matejgroombridge.streaks.ui.theme.AppTheme
 import dev.matejgroombridge.streaks.ui.theme.StreakOrangeDeep
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -335,7 +341,7 @@ private fun HomeScreen(
 ) {
     var resetConfirmSlot by remember { mutableStateOf<HabitSlot?>(null) }
     var showPastWeekManually by remember { mutableStateOf(false) }
-    val today = LocalDate.now().toEpochDay()
+    val today = rememberToday()
     val pastWeekDays = remember(today) { previousSevenDays(today) }
     val primary = state.primary
     val secondary = state.secondary
@@ -419,6 +425,25 @@ private fun HomeScreen(
             dismissButton = { TextButton(onClick = { resetConfirmSlot = null }) { Text("Cancel") } },
         )
     }
+}
+
+/**
+ * Today's epoch day, refreshed when the app resumes and at midnight while it's open.
+ * Streaks count whole days, so a stale "today" would leave every stat a day behind.
+ */
+@Composable
+private fun rememberToday(): Long {
+    var today by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now().toEpochDay() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            delay(Duration.between(now, nextMidnight).toMillis() + 1_000)
+            today = LocalDate.now().toEpochDay()
+        }
+    }
+    return today
 }
 
 @Composable
@@ -804,7 +829,7 @@ private fun AllTimeCard(
     val cleanDays = remember(primary.startEpochDay, primary.failureEpochDays, today) {
         (primary.startEpochDay..today).count { it !in primary.failureEpochDays }
     }
-    val streak = remember(primary.failureEpochDays, today) { primary.currentStreakDays(today) }
+    val streak = remember(primary.startEpochDay, primary.failureEpochDays, today) { primary.currentStreakDays(today) }
     val topStreak = remember(primary.startEpochDay, primary.failureEpochDays, today) {
         longestCleanStreak(primary.startEpochDay, today, primary.failureEpochDays)
     }
