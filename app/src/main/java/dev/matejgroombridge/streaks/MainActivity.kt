@@ -377,11 +377,20 @@ private fun HomeScreen(
         item {
             CurrentStreakCard(
                 primary = primary,
-                secondary = secondary,
                 today = today,
                 showNames = showHabitNames,
                 onResetClick = { slot -> resetConfirmSlot = slot },
             )
+        }
+        if (secondary != null) {
+            item {
+                SecondaryStreakCard(
+                    secondary = secondary,
+                    today = today,
+                    showNames = showHabitNames,
+                    onResetClick = { resetConfirmSlot = HabitSlot.Secondary },
+                )
+            }
         }
         if (showPastWeek) {
             item {
@@ -498,7 +507,6 @@ private fun HomeCard(
 @Composable
 private fun CurrentStreakCard(
     primary: BadHabit,
-    secondary: BadHabit?,
     today: Long,
     showNames: Boolean,
     onResetClick: (HabitSlot) -> Unit,
@@ -513,26 +521,26 @@ private fun CurrentStreakCard(
             onClick = { onResetClick(HabitSlot.Primary) },
             modifier = Modifier.fillMaxWidth(),
         )
-        if (secondary != null) {
-            Spacer(Modifier.height(18.dp))
-            // The secondary habit sits in its own pill, with its reset sized down to match it.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                    .padding(10.dp),
-            ) {
-                StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
-                    ResetStreakButton(
-                        label = "Reset",
-                        icon = Icons.Outlined.WarningAmber,
-                        colors = secondary.palette,
-                        onClick = { onResetClick(HabitSlot.Secondary) },
-                        compact = true,
-                    )
-                }
-            }
+    }
+}
+
+/** The secondary habit gets its own card under the primary's, with a reset sized down to match it. */
+@Composable
+private fun SecondaryStreakCard(
+    secondary: BadHabit,
+    today: Long,
+    showNames: Boolean,
+    onResetClick: () -> Unit,
+) {
+    HomeCard {
+        StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
+            ResetStreakButton(
+                label = "Reset",
+                icon = Icons.Outlined.WarningAmber,
+                colors = secondary.palette,
+                onClick = onResetClick,
+                compact = true,
+            )
         }
     }
 }
