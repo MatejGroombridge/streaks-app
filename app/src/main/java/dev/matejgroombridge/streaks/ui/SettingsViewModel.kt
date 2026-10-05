@@ -28,6 +28,7 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     fun setSwipeToNavigate(enabled: Boolean) = viewModelScope.launch { repository.setSwipeToNavigate(enabled) }
     fun setDailyCheckReminder(enabled: Boolean) = viewModelScope.launch { repository.setDailyCheckReminder(enabled) }
     fun setZenMode(enabled: Boolean) = viewModelScope.launch { repository.setZenMode(enabled) }
+    fun setShowHabitNames(enabled: Boolean) = viewModelScope.launch { repository.setShowHabitNames(enabled) }
 
     companion object {
         fun factory(application: Application): ViewModelProvider.Factory = viewModelFactory {

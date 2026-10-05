@@ -4,22 +4,44 @@ import java.time.LocalDate
 
 /** One immutable snapshot of all app data persisted by StreakRepository. */
 data class StreakState(
+    val primary: BadHabit = BadHabit(),
+    val secondary: BadHabit? = null,
+) {
+    fun habit(slot: HabitSlot): BadHabit? = when (slot) {
+        HabitSlot.Primary -> primary
+        HabitSlot.Secondary -> secondary
+    }
+}
+
+/**
+ * A habit the user is trying to stop. Icon and colour are stored as string keys
+ * into the UI catalogues so future catalogue edits never invalidate saved data.
+ */
+data class BadHabit(
+    val name: String = DEFAULT_NAME,
+    val iconKey: String = DEFAULT_ICON_KEY,
+    val colorKey: String = DEFAULT_COLOR_KEY,
     val startEpochDay: Long = LocalDate.now().toEpochDay(),
     val failureEpochDays: Set<Long> = emptySet(),
-    val blocker: BlockerState = BlockerState(),
 ) {
     fun currentStreakDays(todayEpochDay: Long = LocalDate.now().toEpochDay()): Long {
         val lastFailure = failureEpochDays.filter { it <= todayEpochDay }.maxOrNull()
         val baseline = lastFailure ?: (startEpochDay - 1)
         return (todayEpochDay - baseline).coerceAtLeast(0)
     }
+
+    companion object {
+        // The app only tracked porn before habits became editable, so existing
+        // users keep that name and the fire icon; peach is the closest palette
+        // entry to the original orange.
+        const val DEFAULT_NAME = "Porn"
+        const val DEFAULT_ICON_KEY = "fire"
+        const val DEFAULT_COLOR_KEY = "peach"
+        const val MAX_NAME_LENGTH = 40
+    }
 }
 
-data class BlockerState(
-    val blockAllPornSites: Boolean = false,
-    val customSites: List<String> = emptyList(),
-    val blockerEnabled: Boolean = false,
-)
+enum class HabitSlot { Primary, Secondary }
 
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
@@ -28,6 +50,7 @@ data class AppSettings(
     val swipeToNavigate: Boolean = true,
     val dailyCheckReminder: Boolean = false,
     val zenMode: Boolean = false,
+    val showHabitNames: Boolean = false,
 )
 
 enum class ThemeMode { System, Light, Dark }

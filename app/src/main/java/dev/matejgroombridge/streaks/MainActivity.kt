@@ -1,16 +1,10 @@
 package dev.matejgroombridge.streaks
 
-import android.app.Activity
 import android.app.Application
-import android.content.Intent
-import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -49,17 +42,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -92,6 +82,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -99,30 +91,49 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import dev.matejgroombridge.streaks.blocker.AdultDomains
-import dev.matejgroombridge.streaks.blocker.BlockerVpnService
 import dev.matejgroombridge.streaks.data.AppSettings
-import dev.matejgroombridge.streaks.data.BlockerState
+import dev.matejgroombridge.streaks.data.BadHabit
+import dev.matejgroombridge.streaks.data.HabitSlot
 import dev.matejgroombridge.streaks.data.StreakState
 import dev.matejgroombridge.streaks.data.ThemeMode
 import dev.matejgroombridge.streaks.data.WeekStart
 import dev.matejgroombridge.streaks.ui.SettingsViewModel
 import dev.matejgroombridge.streaks.ui.StreakViewModel
+import dev.matejgroombridge.streaks.ui.components.HabitColor
+import dev.matejgroombridge.streaks.ui.components.HabitColors
+import dev.matejgroombridge.streaks.ui.components.HabitIcon
+import dev.matejgroombridge.streaks.ui.components.HabitIcons
+import dev.matejgroombridge.streaks.ui.components.icon
+import dev.matejgroombridge.streaks.ui.components.palette
 import dev.matejgroombridge.streaks.ui.theme.AppTheme
 import dev.matejgroombridge.streaks.ui.theme.StreakOrangeDeep
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -148,7 +159,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class DetailScreen { Blocker, Settings }
+private enum class DetailScreen { Settings }
 
 @Composable
 private fun StreaksApp(settingsViewModel: SettingsViewModel) {
@@ -159,23 +170,19 @@ private fun StreaksApp(settingsViewModel: SettingsViewModel) {
     var detailScreen by remember { mutableStateOf<DetailScreen?>(null) }
 
     when (detailScreen) {
-        DetailScreen.Blocker -> BlockerScreen(
-            blocker = streakState.blocker,
-            viewModel = streakViewModel,
-            padding = PaddingValues(),
-            onBack = { detailScreen = null },
-        )
         DetailScreen.Settings -> SettingsScreen(
             settings = settings,
             viewModel = settingsViewModel,
+            streakState = streakState,
+            streakViewModel = streakViewModel,
             padding = PaddingValues(),
             onBack = { detailScreen = null },
         )
         null -> HomeScreen(
             state = streakState,
+            showHabitNames = settings.showHabitNames,
             viewModel = streakViewModel,
             padding = PaddingValues(),
-            onBlockerClick = { detailScreen = DetailScreen.Blocker },
             onSettingsClick = { detailScreen = DetailScreen.Settings },
         )
     }
@@ -214,10 +221,10 @@ private fun PastWeekScreen(
         ) {
             item {
                 PastWeekRow(
-                    failedDays = state.failureEpochDays,
+                    failedDays = state.primary.failureEpochDays,
                     days = days,
                     today = today,
-                    onSetFailed = viewModel::setFailure,
+                    onSetFailed = { day, failed -> viewModel.setFailure(HabitSlot.Primary, day, failed) },
                 )
             }
         }
@@ -334,17 +341,19 @@ private fun DayCellShape(
 @Composable
 private fun HomeScreen(
     state: StreakState,
+    showHabitNames: Boolean,
     viewModel: StreakViewModel,
     padding: PaddingValues,
-    onBlockerClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
-    var showResetConfirm by remember { mutableStateOf(false) }
+    var resetConfirmSlot by remember { mutableStateOf<HabitSlot?>(null) }
     var showPastWeekManually by remember { mutableStateOf(false) }
-    val today = LocalDate.now().toEpochDay()
+    val today = rememberToday()
     val pastWeekDays = remember(today) { previousSevenDays(today) }
-    val hasRecentFailure = remember(state.failureEpochDays, pastWeekDays) {
-        pastWeekDays.any { it in state.failureEpochDays }
+    val primary = state.primary
+    val secondary = state.secondary
+    val hasRecentFailure = remember(primary.failureEpochDays, secondary?.failureEpochDays, pastWeekDays) {
+        pastWeekDays.any { it in primary.failureEpochDays || (secondary != null && it in secondary.failureEpochDays) }
     }
     val showPastWeek = hasRecentFailure || showPastWeekManually
     val todayDate = remember(today) { LocalDate.ofEpochDay(today) }
@@ -353,7 +362,6 @@ private fun HomeScreen(
         val mondayOfThisWeek = todayDate.minusDays(daysAfterMon.toLong())
         mondayOfThisWeek.plusDays(6)
     }
-    val streakDays = state.currentStreakDays(today)
 
     LazyColumn(
         modifier = Modifier
@@ -364,26 +372,36 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item {
-            HomeHeader(
-                onOpenBlocker = onBlockerClick,
-                onOpenSettings = onSettingsClick,
-            )
+            HomeHeader(onOpenSettings = onSettingsClick)
         }
         item {
             CurrentStreakCard(
-                days = streakDays,
-                onResetClick = { showResetConfirm = true },
+                primary = primary,
+                today = today,
+                showNames = showHabitNames,
+                onResetClick = { slot -> resetConfirmSlot = slot },
             )
+        }
+        if (secondary != null) {
+            item {
+                SecondaryStreakCard(
+                    secondary = secondary,
+                    today = today,
+                    showNames = showHabitNames,
+                    onResetClick = { resetConfirmSlot = HabitSlot.Secondary },
+                )
+            }
         }
         if (showPastWeek) {
             item {
                 PastWeekCard(
-                    failedDays = state.failureEpochDays,
+                    primary = primary,
+                    secondary = secondary,
                     days = pastWeekDays,
                     today = today,
                     editable = true,
                     collapsible = !hasRecentFailure,
-                    onSetFailed = viewModel::setFailure,
+                    onSetDay = viewModel::setDayFailures,
                     onToggleWeeklyView = { showPastWeekManually = false },
                 )
             }
@@ -398,32 +416,53 @@ private fun HomeScreen(
         }
     }
 
-    if (showResetConfirm) {
+    val confirmSlot = resetConfirmSlot
+    val confirmHabit = confirmSlot?.let(state::habit)
+    if (confirmSlot != null && confirmHabit != null) {
         AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
-            title = { Text("Reset your streak?") },
+            onDismissRequest = { resetConfirmSlot = null },
+            // With two habits on screen, the icon tells the user which streak they're about to reset.
+            icon = { Icon(if (secondary == null) Icons.Outlined.WarningAmber else confirmHabit.icon, contentDescription = null) },
+            title = { Text(if (showHabitNames) "Reset your ${confirmHabit.name} streak?" else "Reset your streak?") },
             text = { Text("This marks today as a failure. No shame, no spiral — just an honest reset and the next right action.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.recordFailureToday()
-                        showResetConfirm = false
+                        viewModel.recordFailureToday(confirmSlot)
+                        resetConfirmSlot = null
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = StreakOrangeDeep,
-                        contentColor = Color.White,
+                        containerColor = confirmHabit.palette.accent,
+                        contentColor = confirmHabit.palette.onColor,
                     ),
                 ) { Text("I slipped today") }
             },
-            dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { resetConfirmSlot = null }) { Text("Cancel") } },
         )
     }
 }
 
+/**
+ * Today's epoch day, refreshed when the app resumes and at midnight while it's open.
+ * Streaks count whole days, so a stale "today" would leave every stat a day behind.
+ */
+@Composable
+private fun rememberToday(): Long {
+    var today by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now().toEpochDay() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            delay(Duration.between(now, nextMidnight).toMillis() + 1_000)
+            today = LocalDate.now().toEpochDay()
+        }
+    }
+    return today
+}
+
 @Composable
 private fun HomeHeader(
-    onOpenBlocker: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Box(
@@ -435,9 +474,6 @@ private fun HomeHeader(
             modifier = Modifier.align(Alignment.TopEnd),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onOpenBlocker) {
-                Icon(Icons.Outlined.Block, contentDescription = "Blocker")
-            }
             IconButton(onClick = onOpenSettings) {
                 Icon(Icons.Outlined.Settings, contentDescription = "Settings")
             }
@@ -469,67 +505,199 @@ private fun HomeCard(
 }
 
 @Composable
-private fun CurrentStreakCard(days: Long, onResetClick: () -> Unit) {
+private fun CurrentStreakCard(
+    primary: BadHabit,
+    today: Long,
+    showNames: Boolean,
+    onResetClick: (HabitSlot) -> Unit,
+) {
     HomeCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Outlined.LocalFireDepartment,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(38.dp),
-                )
-            }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = days.toString(),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = if (days == 1L) "day" else "days",
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        StreakCountRow(habit = primary, days = primary.currentStreakDays(today), showName = showNames)
         Spacer(Modifier.height(18.dp))
-        Button(
-            onClick = onResetClick,
+        ResetStreakButton(
+            label = "Reset streak",
+            icon = Icons.Outlined.WarningAmber,
+            colors = primary.palette,
+            onClick = { onResetClick(HabitSlot.Primary) },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = StreakOrangeDeep,
-                contentColor = Color.White,
-            ),
-        ) {
-            Icon(Icons.Outlined.WarningAmber, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Reset streak")
+        )
+    }
+}
+
+/** The secondary habit gets its own card under the primary's, with a reset sized down to match it. */
+@Composable
+private fun SecondaryStreakCard(
+    secondary: BadHabit,
+    today: Long,
+    showNames: Boolean,
+    onResetClick: () -> Unit,
+) {
+    HomeCard {
+        StreakCountRow(habit = secondary, days = secondary.currentStreakDays(today), showName = showNames, compact = true) {
+            ResetStreakButton(
+                label = "Reset",
+                icon = Icons.Outlined.WarningAmber,
+                colors = secondary.palette,
+                onClick = onResetClick,
+                compact = true,
+            )
         }
+    }
+}
+
+/** A habit's streak. The secondary habit uses the [compact] size so the primary stays the focus. */
+@Composable
+private fun StreakCountRow(
+    habit: BadHabit,
+    days: Long,
+    showName: Boolean,
+    compact: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        if (compact) {
+            HabitBadge(habit = habit, size = 44.dp, iconSize = 26.dp, cornerRadius = 14.dp)
+        } else {
+            HabitBadge(habit = habit, size = 64.dp, iconSize = 38.dp, cornerRadius = 20.dp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            if (showName) {
+                Text(
+                    text = habit.name,
+                    style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            StreakDayCount(days = days, compact = compact)
+        }
+        trailing?.invoke()
+    }
+}
+
+private class CountSize(val count: ComposeTextStyle, val unit: ComposeTextStyle, val unitBottomPadding: Dp)
+
+/**
+ * The day count and its unit. A reset pill can share the row, so a long count steps
+ * down a size rather than wrapping, and as a last resort the unit moves underneath.
+ */
+@Composable
+private fun StreakDayCount(days: Long, compact: Boolean) {
+    val type = MaterialTheme.typography
+    // Largest first; the first entry is the card's normal look.
+    val sizes = if (compact) {
+        listOf(CountSize(type.headlineLarge, type.titleMedium, 4.dp), CountSize(type.headlineMedium, type.bodyMedium, 3.dp))
+    } else {
+        listOf(
+            CountSize(type.displayMedium, type.headlineSmall, 8.dp),
+            CountSize(type.displaySmall, type.titleLarge, 6.dp),
+            CountSize(type.headlineLarge, type.titleMedium, 4.dp),
+        )
+    }
+    val count = days.toString()
+    val unit = if (days == 1L) "day" else "days"
+    val gap = if (compact) 6.dp else 8.dp
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints {
+        val gapPx = with(LocalDensity.current) { gap.roundToPx() }
+        fun countWidth(size: CountSize) = measurer.measure(count, size.count.copy(fontWeight = FontWeight.SemiBold)).size.width
+        val fitting = sizes.firstOrNull { size ->
+            countWidth(size) + gapPx + measurer.measure(unit, size.unit).size.width <= constraints.maxWidth
+        }
+        // Stacked, the count has the whole width to itself, so it can stay larger.
+        val size = fitting ?: sizes.firstOrNull { countWidth(it) <= constraints.maxWidth } ?: sizes.last()
+        val countText = @Composable {
+            Text(
+                text = count,
+                style = size.count,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        val unitText = @Composable { modifier: Modifier ->
+            Text(
+                text = unit,
+                modifier = modifier,
+                style = size.unit,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        if (fitting != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                countText()
+                Spacer(Modifier.width(gap))
+                unitText(Modifier.padding(bottom = size.unitBottomPadding))
+            }
+        } else {
+            Column {
+                countText()
+                unitText(Modifier)
+            }
+        }
+    }
+}
+
+/** A habit's identity tile: its icon on the palette accent, as in the rest of the app family. */
+@Composable
+private fun HabitBadge(habit: BadHabit, size: Dp, iconSize: Dp, cornerRadius: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(habit.palette.accent),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            habit.icon,
+            contentDescription = null,
+            tint = habit.palette.onColor,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+@Composable
+private fun ResetStreakButton(
+    label: String,
+    icon: ImageVector,
+    colors: HabitColor,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colors.accent,
+            contentColor = colors.onColor,
+        ),
+        contentPadding = if (compact) PaddingValues(horizontal = 14.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(if (compact) 16.dp else 18.dp))
+        Spacer(Modifier.width(if (compact) 6.dp else 8.dp))
+        Text(label)
     }
 }
 
 @Composable
 private fun PastWeekCard(
-    failedDays: Set<Long>,
+    primary: BadHabit,
+    secondary: BadHabit?,
     days: List<Long>,
     today: Long,
     editable: Boolean,
     collapsible: Boolean,
-    onSetFailed: (Long, Boolean) -> Unit,
+    onSetDay: (day: Long, primaryFailed: Boolean, secondaryFailed: Boolean) -> Unit,
     onToggleWeeklyView: () -> Unit,
 ) {
     HomeCard {
@@ -547,28 +715,46 @@ private fun PastWeekCard(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             days.forEach { epochDay ->
-                val date = LocalDate.ofEpochDay(epochDay)
-                val failed = epochDay in failedDays
                 InlineWeekDay(
-                    date = date,
-                    failed = failed,
+                    date = LocalDate.ofEpochDay(epochDay),
+                    primary = primary,
+                    secondary = secondary,
                     isToday = epochDay == today,
                     editable = editable,
-                    onClick = { onSetFailed(epochDay, !failed) },
+                    onSet = { primaryFailed, secondaryFailed -> onSetDay(epochDay, primaryFailed, secondaryFailed) },
                 )
             }
         }
     }
 }
 
+/**
+ * Tap order for a past-week day: clean → primary broken → secondary broken → both broken → clean.
+ * Without a secondary habit a tap simply toggles the primary one.
+ */
+private fun nextDayState(primaryFailed: Boolean, secondaryFailed: Boolean, hasSecondary: Boolean): Pair<Boolean, Boolean> = when {
+    !hasSecondary -> !primaryFailed to false
+    !primaryFailed && !secondaryFailed -> true to false
+    primaryFailed && !secondaryFailed -> false to true
+    !primaryFailed && secondaryFailed -> true to true
+    else -> false to false
+}
+
 @Composable
 private fun InlineWeekDay(
     date: LocalDate,
-    failed: Boolean,
+    primary: BadHabit,
+    secondary: BadHabit?,
     isToday: Boolean,
     editable: Boolean,
-    onClick: () -> Unit,
+    onSet: (primaryFailed: Boolean, secondaryFailed: Boolean) -> Unit,
 ) {
+    val epochDay = date.toEpochDay()
+    val failed = epochDay in primary.failureEpochDays
+    val secondaryFailed = secondary != null && epochDay in secondary.failureEpochDays
+    val primaryColors = primary.palette
+    val secondaryColors = secondary?.palette
+    val emptyColor = MaterialTheme.colorScheme.surfaceVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
@@ -580,21 +766,71 @@ private fun InlineWeekDay(
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (failed) StreakOrangeDeep else MaterialTheme.colorScheme.surfaceVariant)
-                .then(if (editable) Modifier.clickable(onClick = onClick) else Modifier),
+                .drawBehind {
+                    when {
+                        failed && secondaryColors != null && secondaryFailed -> {
+                            // Both broken: split diagonally, primary top-left and secondary bottom-right.
+                            drawRect(primaryColors.accent)
+                            val lowerRight = Path().apply {
+                                moveTo(size.width, 0f)
+                                lineTo(size.width, size.height)
+                                lineTo(0f, size.height)
+                                close()
+                            }
+                            drawPath(lowerRight, secondaryColors.accent)
+                        }
+                        failed -> drawRect(primaryColors.accent)
+                        secondaryColors != null && secondaryFailed -> drawRect(secondaryColors.accent)
+                        else -> drawRect(emptyColor)
+                    }
+                }
+                .semantics {
+                    stateDescription = when {
+                        failed && secondaryFailed -> "Both habits broken"
+                        failed -> "Primary habit broken"
+                        secondaryFailed -> "Secondary habit broken"
+                        else -> "Clean"
+                    }
+                }
+                .then(
+                    if (editable) {
+                        Modifier.clickable {
+                            val (nextPrimary, nextSecondary) = nextDayState(failed, secondaryFailed, hasSecondary = secondary != null)
+                            onSet(nextPrimary, nextSecondary)
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
-            if (failed) {
-                Icon(Icons.Outlined.Close, contentDescription = "Reset day", tint = Color.White, modifier = Modifier.size(17.dp))
-            } else {
-                Text(
-                    text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = date.dayOfMonth.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = when {
+                    failed -> primaryColors.onColor
+                    secondaryColors != null && secondaryFailed -> secondaryColors.onColor
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontWeight = if (failed || secondaryFailed) FontWeight.SemiBold else FontWeight.Normal,
+            )
         }
     }
+}
+
+/** Secondary habit failures render as a dot so they never hide the primary habit's filled square. */
+@Composable
+private fun SecondaryFailureDot(
+    colors: HabitColor,
+    size: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(colors.accent),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -650,15 +886,18 @@ private fun AllTimeCard(
     endOfCurrentWeek: LocalDate,
     onShowWeeklyView: (() -> Unit)? = null,
 ) {
-    val cleanDays = remember(state.startEpochDay, state.failureEpochDays, today) {
-        (state.startEpochDay..today).count { it !in state.failureEpochDays }
+    // Stats describe the primary habit; the secondary habit only appears in the grid.
+    val primary = state.primary
+    val secondary = state.secondary
+    val cleanDays = remember(primary.startEpochDay, primary.failureEpochDays, today) {
+        (primary.startEpochDay..today).count { it !in primary.failureEpochDays }
     }
-    val streak = remember(state.failureEpochDays, today) { state.currentStreakDays(today) }
-    val topStreak = remember(state.startEpochDay, state.failureEpochDays, today) {
-        longestCleanStreak(state.startEpochDay, today, state.failureEpochDays)
+    val streak = remember(primary.startEpochDay, primary.failureEpochDays, today) { primary.currentStreakDays(today) }
+    val topStreak = remember(primary.startEpochDay, primary.failureEpochDays, today) {
+        longestCleanStreak(primary.startEpochDay, today, primary.failureEpochDays)
     }
-    val resets = remember(state.startEpochDay, state.failureEpochDays, today) {
-        state.failureEpochDays.count { it in state.startEpochDay..today }
+    val resets = remember(primary.startEpochDay, primary.failureEpochDays, today) {
+        primary.failureEpochDays.count { it in primary.startEpochDay..today }
     }
 
     HomeCard {
@@ -682,11 +921,13 @@ private fun AllTimeCard(
         }
         Spacer(Modifier.height(18.dp))
         ContributionGrid(
-            createdAtEpochDay = state.startEpochDay,
-            failedDays = state.failureEpochDays,
+            createdAtEpochDay = primary.startEpochDay,
+            failedDays = primary.failureEpochDays,
+            secondaryFailedDays = secondary?.failureEpochDays.orEmpty(),
             today = today,
             endOfCurrentWeek = endOfCurrentWeek,
-            accent = StreakOrangeDeep,
+            accent = primary.palette.accent,
+            secondaryColors = secondary?.palette,
             emptyTint = MaterialTheme.colorScheme.surfaceVariant,
         )
     }
@@ -706,56 +947,20 @@ private fun StatBlock(label: String, value: String, modifier: Modifier = Modifie
     }
 }
 
-@Composable
-private fun ProtectionStatusCard(
-    blocker: BlockerState,
-    onManageClick: () -> Unit,
-) {
-    val hasRules = blocker.blockAllPornSites || blocker.customSites.isNotEmpty()
-    val active = blocker.blockerEnabled && hasRules
-    HomeCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Outlined.Block, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Protection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = when {
-                        active -> "Blocker active"
-                        hasRules -> "Rules ready, blocker off"
-                        else -> "No blocker rules enabled"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TextButton(onClick = onManageClick) { Text("Manage") }
-        }
-    }
-}
-
 private val CELL_SIZE = 12.dp
 private val CELL_GAP = 3.dp
+private val SECONDARY_DOT_SIZE = 6.dp
 private val GRID_SIDE_PADDING = 0.dp
 
 @Composable
 private fun ContributionGrid(
     createdAtEpochDay: Long,
     failedDays: Set<Long>,
+    secondaryFailedDays: Set<Long>,
     today: Long,
     endOfCurrentWeek: LocalDate,
     accent: Color,
+    secondaryColors: HabitColor?,
     emptyTint: Color,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -794,8 +999,10 @@ private fun ContributionGrid(
                         val failed = cellEpoch in failedDays
                         GridCell(
                             failed = failed,
+                            secondaryFailed = cellEpoch in secondaryFailedDays,
                             inactive = inFuture || beforeStart,
                             accent = accent,
+                            secondaryColors = secondaryColors,
                             emptyTint = emptyTint,
                         )
                     }
@@ -808,8 +1015,10 @@ private fun ContributionGrid(
 @Composable
 private fun GridCell(
     failed: Boolean,
+    secondaryFailed: Boolean,
     inactive: Boolean,
     accent: Color,
+    secondaryColors: HabitColor?,
     emptyTint: Color,
 ) {
     Box(
@@ -823,7 +1032,12 @@ private fun GridCell(
                     else -> emptyTint
                 },
             ),
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        if (secondaryFailed && secondaryColors != null) {
+            SecondaryFailureDot(colors = secondaryColors, size = SECONDARY_DOT_SIZE)
+        }
+    }
 }
 
 private fun longestCleanStreak(start: Long, today: Long, failedDays: Set<Long>): Long {
@@ -857,253 +1071,19 @@ private fun SobrietyCard(streakDays: Long) {
 
 private fun previousSevenDays(today: Long): List<Long> = (6 downTo 0).map { today - it }
 
-@Composable
-private fun BlockerScreen(
-    blocker: BlockerState,
-    viewModel: StreakViewModel,
-    padding: PaddingValues,
-    onBack: () -> Unit,
-) {
-    val context = LocalContext.current
-    var newSite by remember { mutableStateOf("") }
-    var challengeFact by remember { mutableStateOf(PornFacts.random()) }
-    var showChallenge by remember { mutableStateOf(false) }
-    var vpnDenied by remember { mutableStateOf(false) }
-    val vpnPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            ContextCompat.startForegroundService(context, Intent(context, BlockerVpnService::class.java))
-            viewModel.setBlockerEnabled(true)
-            vpnDenied = false
-        } else {
-            vpnDenied = true
-            viewModel.setBlockerEnabled(false)
-        }
-    }
-
-    LaunchedEffect(blocker.blockerEnabled) {
-        if (blocker.blockerEnabled && VpnService.prepare(context) == null) {
-            ContextCompat.startForegroundService(context, Intent(context, BlockerVpnService::class.java))
-        }
-    }
-
-    fun requestEnableBlocker() {
-        val prepareIntent = VpnService.prepare(context)
-        if (prepareIntent != null) {
-            vpnPermissionLauncher.launch(prepareIntent)
-        } else {
-            ContextCompat.startForegroundService(context, Intent(context, BlockerVpnService::class.java))
-            viewModel.setBlockerEnabled(true)
-            vpnDenied = false
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            PageHeader("Blocker", "Build friction before the craving becomes automatic.")
-        }
-        item {
-            BlockerStatusCard(blocker = blocker, vpnDenied = vpnDenied)
-        }
-        item {
-            SettingsCard {
-                SwitchRow(
-                    title = "Block all porn sites",
-                    subtitle = "Main switch for the curated adult-site block list.",
-                    checked = blocker.blockAllPornSites,
-                    onCheckedChange = viewModel::setBlockAllPornSites,
-                )
-            }
-        }
-        item {
-            SettingsCard {
-                SwitchRow(
-                    title = "Blocker enabled",
-                    subtitle = if (blocker.blockerEnabled) "Protection is on through a local DNS-filtering VPN." else "Turning off requires a writing challenge.",
-                    checked = blocker.blockerEnabled,
-                    onCheckedChange = { enabled ->
-                        if (enabled) requestEnableBlocker() else {
-                            challengeFact = PornFacts.random()
-                            showChallenge = true
-                        }
-                    },
-                )
-            }
-        }
-        item {
-            SettingsCard {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Individual sites", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    OutlinedTextField(
-                        value = newSite,
-                        onValueChange = { newSite = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("example.com") },
-                        leadingIcon = { Icon(Icons.Outlined.Public, contentDescription = null) },
-                        singleLine = true,
-                    )
-                    Button(
-                        onClick = {
-                            viewModel.addSite(newSite)
-                            newSite = ""
-                        },
-                        enabled = newSite.isNotBlank(),
-                    ) { Text("Add site") }
-                }
-            }
-        }
-        if (blocker.customSites.isEmpty()) {
-            item { Text("No custom sites yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } else {
-            items(blocker.customSites) { site ->
-                SettingsCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(site, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        IconButton(onClick = { viewModel.removeSite(site) }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Remove $site")
-                        }
-                    }
-                }
-            }
-        }
-        if (vpnDenied) {
-            item {
-                Text(
-                    "VPN permission was not granted, so blocking could not be enabled.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        item {
-            Text(
-                "Blocking uses Android's local VPN API to inspect DNS lookups on-device. Matching adult/custom domains return NXDOMAIN; allowed DNS requests are forwarded upstream.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-
-    if (showChallenge) {
-        UnblockChallengeDialog(
-            fact = challengeFact,
-            onCancel = { showChallenge = false },
-            onComplete = {
-                context.startService(BlockerVpnService.stopIntent(context))
-                viewModel.setBlockerEnabled(false)
-                showChallenge = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun BlockerStatusCard(blocker: BlockerState, vpnDenied: Boolean) {
-    val builtInRules = if (blocker.blockAllPornSites) AdultDomains.suffixes.size else 0
-    val customRules = blocker.customSites.size
-    val totalRules = builtInRules + customRules
-    val statusColor = when {
-        vpnDenied -> MaterialTheme.colorScheme.error
-        blocker.blockerEnabled -> StreakOrangeDeep
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val statusText = when {
-        vpnDenied -> "Permission needed"
-        blocker.blockerEnabled -> "Active"
-        else -> "Paused"
-    }
-
-    SettingsCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(statusColor.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(statusColor),
-                )
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("DNS protection: $statusText", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "$totalRules blocked domain rule${if (totalRules == 1) "" else "s"} loaded • ${customRules} custom",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            AssistChip(
-                onClick = {},
-                label = { Text(if (blocker.blockAllPornSites) "Adult list on" else "Adult list off") },
-                leadingIcon = { Icon(Icons.Outlined.Block, null, Modifier.size(18.dp)) },
-            )
-            AssistChip(
-                onClick = {},
-                label = { Text(if (blocker.blockerEnabled) "VPN running" else "VPN stopped") },
-                leadingIcon = { Icon(Icons.Outlined.Public, null, Modifier.size(18.dp)) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun UnblockChallengeDialog(
-    fact: String,
-    onCancel: () -> Unit,
-    onComplete: () -> Unit,
-) {
-    var typed by remember { mutableStateOf("") }
-    val wordCount = typed.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size
-    val canDisable = wordCount >= 50
-
-    AlertDialog(
-        onDismissRequest = onCancel,
-        icon = { Icon(Icons.Outlined.LockOpen, contentDescription = null) },
-        title = { Text("Slow down first") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(fact, style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(
-                    value = typed,
-                    onValueChange = { typed = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    label = { Text("Type at least 50 words about why you are turning this off") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                )
-                Text("$wordCount / 50 words", color = if (canDisable) StreakOrangeDeep else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
-        confirmButton = { Button(onClick = onComplete, enabled = canDisable) { Text("Disable blocker") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Keep blocker on") } },
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
     settings: AppSettings,
     viewModel: SettingsViewModel,
+    streakState: StreakState,
+    streakViewModel: StreakViewModel,
     padding: PaddingValues,
     onBack: () -> Unit,
 ) {
+    var editingSlot by remember { mutableStateOf<HabitSlot?>(null) }
+    var confirmRemoveSecondary by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { DetailTopBar(title = "Settings", onBack = onBack) },
@@ -1116,6 +1096,24 @@ private fun SettingsScreen(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            item { SettingsSectionTitle("Habits") }
+            item {
+                SettingsCard {
+                    HabitSettingsRow(
+                        title = "Primary habit",
+                        habit = streakState.primary,
+                        onClick = { editingSlot = HabitSlot.Primary },
+                    )
+                    DividerLine()
+                    HabitSettingsRow(
+                        title = "Secondary habit",
+                        habit = streakState.secondary,
+                        onClick = { editingSlot = HabitSlot.Secondary },
+                    )
+                    DividerLine()
+                    SwitchRow("Show habit names", "Display each habit's name on the home screen.", settings.showHabitNames, viewModel::setShowHabitNames)
+                }
+            }
             item { SettingsSectionTitle("Appearance") }
             item {
                 SettingsCard {
@@ -1172,13 +1170,225 @@ private fun SettingsScreen(
             }
         }
     }
+
+    val slot = editingSlot
+    if (slot != null) {
+        val existing = streakState.habit(slot)
+        // Keyed by slot so switching between the two editors never carries over unsaved input.
+        key(slot) {
+            HabitEditorDialog(
+                title = when {
+                    slot == HabitSlot.Primary -> "Edit Primary Habit"
+                    existing == null -> "Add Secondary Habit"
+                    else -> "Edit Secondary Habit"
+                },
+                initial = existing ?: BadHabit(
+                    name = "",
+                    iconKey = if (streakState.primary.iconKey == HabitIcons.GENERIC_KEY) BadHabit.DEFAULT_ICON_KEY else HabitIcons.GENERIC_KEY,
+                    colorKey = HabitColors.contrasting(streakState.primary.colorKey).key,
+                ),
+                onDismiss = { editingSlot = null },
+                onSave = { name, iconKey, colorKey ->
+                    streakViewModel.saveHabit(slot, name, iconKey, colorKey)
+                    editingSlot = null
+                },
+                onRemove = if (slot == HabitSlot.Secondary && existing != null) {
+                    { confirmRemoveSecondary = true }
+                } else {
+                    null
+                },
+            )
+        }
+    }
+
+    val secondary = streakState.secondary
+    if (confirmRemoveSecondary && secondary != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoveSecondary = false },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("Remove ${secondary.name}?") },
+            text = { Text("This deletes the secondary habit's streak and failure history. Your primary habit is not affected.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        streakViewModel.removeSecondaryHabit()
+                        confirmRemoveSecondary = false
+                        editingSlot = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoveSecondary = false }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
-private fun PageHeader(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun HabitSettingsRow(
+    title: String,
+    habit: BadHabit?,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (habit != null) {
+            HabitBadge(habit = habit, size = 32.dp, iconSize = 20.dp, cornerRadius = 10.dp)
+        } else {
+            Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                text = habit?.name ?: "Not set. Tap to add one.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private const val ICON_PICKER_COLUMNS = 6
+
+@Composable
+private fun HabitEditorDialog(
+    title: String,
+    initial: BadHabit,
+    onDismiss: () -> Unit,
+    onSave: (name: String, iconKey: String, colorKey: String) -> Unit,
+    onRemove: (() -> Unit)?,
+) {
+    var name by remember { mutableStateOf(initial.name) }
+    var iconKey by remember { mutableStateOf(initial.iconKey) }
+    var colorKey by remember { mutableStateOf(initial.colorKey) }
+    val selectedColors = HabitColors.entry(colorKey)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(BadHabit.MAX_NAME_LENGTH) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("What do you want to stop?") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                )
+                EditorSection("Icon") {
+                    HabitIcons.all.chunked(ICON_PICKER_COLUMNS).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            row.forEach { entry ->
+                                IconChoice(
+                                    entry = entry,
+                                    selected = entry.key == iconKey,
+                                    colors = selectedColors,
+                                    onClick = { iconKey = entry.key },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(ICON_PICKER_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+                EditorSection("Colour") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        HabitColors.all.forEach { entry ->
+                            ColorChoice(
+                                entry = entry,
+                                selected = entry.key == colorKey,
+                                onClick = { colorKey = entry.key },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name, iconKey, colorKey) }, enabled = name.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (onRemove != null) {
+                    TextButton(
+                        onClick = onRemove,
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Remove") }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun EditorSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        content()
+    }
+}
+
+@Composable
+private fun IconChoice(
+    entry: HabitIcon,
+    selected: Boolean,
+    colors: HabitColor,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(CircleShape)
+            .background(if (selected) colors.accent else MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            entry.icon,
+            contentDescription = entry.label,
+            tint = if (selected) colors.onColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun ColorChoice(
+    entry: HabitColor,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(CircleShape)
+            .background(entry.accent)
+            .clickable(onClickLabel = entry.label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(Icons.Outlined.Check, contentDescription = "${entry.label} selected", tint = entry.onColor, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
@@ -1272,25 +1482,4 @@ private fun DividerLine() {
             .height(1.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     )
-}
-
-private object PornFacts {
-    private val facts = listOf(
-        "Porn can train the brain to seek novelty, intensity, and instant reward, which may make real intimacy feel less stimulating when the habit becomes compulsive.",
-        "Many people report that compulsive porn use is not mainly about sex, but about escaping stress, loneliness, boredom, shame, or emotional discomfort.",
-        "Repeatedly using porn during difficult emotions can strengthen an avoidance loop: discomfort appears, porn numbs it briefly, and the original problem remains unsolved.",
-        "Porn often presents bodies, consent, pleasure, and relationships in unrealistic ways, which can quietly reshape expectations about sex and connection.",
-        "A craving usually peaks and falls like a wave. Delaying for ten minutes often gives the rational brain enough time to regain control.",
-        "Turning off protection while aroused is rarely a neutral decision; it is often the habit protecting itself from friction and accountability.",
-        "Recovery is easier when barriers are strongest before a craving begins, because willpower is weakest when the cue and opportunity are already present.",
-        "Compulsive porn use can steal sleep, focus, motivation, and confidence by converting short urges into long sessions followed by regret.",
-        "Escalating content can happen gradually: the brain adapts to familiar stimulation and starts searching for more novelty to get the same effect.",
-        "A lapse does not erase progress, but hiding a lapse often feeds shame. Honest tracking turns failure into information instead of identity.",
-        "Porn is designed to be frictionless, private, and endless. Recovery often requires making access slower, more visible, and more deliberate.",
-        "Healthy intimacy depends on attention, patience, empathy, and presence — the opposite of rapidly switching between endless clips.",
-        "The urge to disable a blocker is a signal to pause, breathe, move rooms, contact someone, or do a task that reconnects you to your values.",
-        "Every clean day is not just the absence of porn; it is practice in choosing long-term self-respect over short-term escape.",
-        "If a trigger keeps recurring at the same time, place, or mood, the solution is often changing the environment rather than promising stronger willpower.",
-    )
-    fun random(): String = facts.random()
 }
