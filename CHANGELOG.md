@@ -1,6 +1,11 @@
 # Changelog
 
 
+## v2.1.0 — 2026-10-06
+
+Per-habit stats toggle and back navigation from settings
+
+
 ## v2.0.0 — 2026-10-05
 
 Custom habits and a secondary habit
