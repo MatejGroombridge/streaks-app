@@ -3,6 +3,7 @@ package dev.matejgroombridge.streaks
 import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -87,6 +88,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,6 +170,8 @@ private fun StreaksApp(settingsViewModel: SettingsViewModel) {
     val streakState by streakViewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     var detailScreen by remember { mutableStateOf<DetailScreen?>(null) }
+
+    BackHandler(enabled = detailScreen != null) { detailScreen = null }
 
     when (detailScreen) {
         DetailScreen.Settings -> SettingsScreen(
@@ -886,18 +890,16 @@ private fun AllTimeCard(
     endOfCurrentWeek: LocalDate,
     onShowWeeklyView: (() -> Unit)? = null,
 ) {
-    // Stats describe the primary habit; the secondary habit only appears in the grid.
+    // Stats describe one habit at a time; the grid always shows both.
     val primary = state.primary
     val secondary = state.secondary
-    val cleanDays = remember(primary.startEpochDay, primary.failureEpochDays, today) {
-        (primary.startEpochDay..today).count { it !in primary.failureEpochDays }
+    var showSecondaryStats by rememberSaveable { mutableStateOf(false) }
+    val statsHabit = if (showSecondaryStats && secondary != null) secondary else primary
+    val topStreak = remember(statsHabit.startEpochDay, statsHabit.failureEpochDays, today) {
+        longestCleanStreak(statsHabit.startEpochDay, today, statsHabit.failureEpochDays)
     }
-    val streak = remember(primary.startEpochDay, primary.failureEpochDays, today) { primary.currentStreakDays(today) }
-    val topStreak = remember(primary.startEpochDay, primary.failureEpochDays, today) {
-        longestCleanStreak(primary.startEpochDay, today, primary.failureEpochDays)
-    }
-    val resets = remember(primary.startEpochDay, primary.failureEpochDays, today) {
-        primary.failureEpochDays.count { it in primary.startEpochDay..today }
+    val resets = remember(statsHabit.startEpochDay, statsHabit.failureEpochDays, today) {
+        statsHabit.failureEpochDays.count { it in statsHabit.startEpochDay..today }
     }
 
     HomeCard {
@@ -908,15 +910,21 @@ private fun AllTimeCard(
                     Icon(Icons.Outlined.CalendarMonth, contentDescription = "Show weekly view")
                 }
             }
+            if (secondary != null) {
+                // Shows the habit whose stats are on screen; tapping switches to the other one.
+                val otherHabit = if (statsHabit === secondary) primary else secondary
+                IconButton(onClick = { showSecondaryStats = !showSecondaryStats }) {
+                    Icon(
+                        statsHabit.icon,
+                        contentDescription = "Show ${otherHabit.name} stats",
+                        tint = statsHabit.palette.accent,
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            StatBlock("Clean days", cleanDays.toString(), Modifier.weight(1f))
             StatBlock("Best streak", topStreak.toString(), Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            StatBlock("Current", streak.toString(), Modifier.weight(1f))
             StatBlock("Resets", resets.toString(), Modifier.weight(1f))
         }
         Spacer(Modifier.height(18.dp))
